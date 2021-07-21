@@ -16,8 +16,11 @@ process.source = cms.Source("PoolSource",
 process.demo = cms.EDProducer('CaloJetTimingProducer'
 )
 
+process.caloTimingTestFilter = cms.EDFilter('CaloJetTimingFilter',
+    saveTags = cms.bool( True ),
+)
 process.output = cms.OutputModule( "PoolOutputModule",
-    fileName = cms.untracked.string( "/afs/cern.ch/work/m/mcitron/outputWithTiming.root" ),
+    fileName = cms.untracked.string( "/afs/cern.ch/work/m/mcitron/tempOutput.root" ),
     )
 process.options.SkipEvent = cms.untracked.vstring('ProductNotFound')
 

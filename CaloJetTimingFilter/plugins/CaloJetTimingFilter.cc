@@ -48,8 +48,10 @@ class CaloJetTimingFilter : public HLTFilter {
 	//virtual void endRun(edm::Run const&, edm::EventSetup const&) override;
 	//virtual void beginLuminosityBlock(edm::LuminosityBlock const&, edm::EventSetup const&) override;
 	//virtual void endLuminosityBlock(edm::LuminosityBlock const&, edm::EventSetup const&) override;
+	edm::InputTag jetLabel_;
+	edm::InputTag jetTimeLabel_;
 	edm::EDGetTokenT<reco::CaloJetCollection> jetInputToken;
-	edm::EDGetTokenT<edm::ValueMap<float>> jetTimingsInputToken;
+	edm::EDGetTokenT<edm::ValueMap<float>> jetTimesInputToken;
 
 	// ----------member data ---------------------------
 #ifdef THIS_IS_AN_EVENT_EXAMPLE
@@ -72,8 +74,10 @@ class CaloJetTimingFilter : public HLTFilter {
 // constructors and destructor
 //
 CaloJetTimingFilter::CaloJetTimingFilter(const edm::ParameterSet& iConfig) : HLTFilter(iConfig){
-    jetInputToken = consumes<std::vector<reco::CaloJet>>(edm::InputTag("hltDisplacedHLTCaloJetCollectionProducerMidPt","","HLTX"));
-    jetTimingsInputToken = consumes<edm::ValueMap<float>>(edm::InputTag("hltDisplacedHLTCaloJetCollectionProducerMidPtTiming","","HLTX"));
+    jetLabel_= iConfig.getParameter<edm::InputTag>("jets");
+    jetTimeLabel_= iConfig.getParameter<edm::InputTag>("jetTimes");
+    jetInputToken = consumes<std::vector<reco::CaloJet>>(jetLabel_);
+    jetTimesInputToken = consumes<edm::ValueMap<float>>(jetTimeLabel_);
     //now do what ever initialization is needed
 }
 
@@ -87,11 +91,11 @@ bool CaloJetTimingFilter::hltFilter(edm::Event& iEvent, const edm::EventSetup& i
     int ijet = 0;
     edm::Handle<reco::CaloJetCollection> jets;
     iEvent.getByToken(jetInputToken, jets);
-    edm::Handle<edm::ValueMap<float>> jetTimings;
-    iEvent.getByToken(jetTimingsInputToken, jetTimings);
+    edm::Handle<edm::ValueMap<float>> jetTimes;
+    iEvent.getByToken(jetTimesInputToken, jetTimes);
     for (auto const& c : *jets) {
 	reco::CaloJetRef calojetref(jets, ijet);
-	if((*jetTimings)[calojetref] > 0) accept = true;
+	if((*jetTimes)[calojetref] > 0) accept = true;
 	ijet ++;
     }
     return accept;

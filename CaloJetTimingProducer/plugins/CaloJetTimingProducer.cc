@@ -32,6 +32,11 @@
 
 #include "DataFormats/JetReco/interface/CaloJetCollection.h"
 
+#include "Geometry/CaloGeometry/interface/CaloGeometry.h"
+#include "Geometry/Records/interface/CaloGeometryRecord.h"
+#include "DataFormats/EcalRecHit/interface/EcalRecHitCollections.h"
+#include "HLTrigger/HLTcore/interface/defaultModuleLabel.h"
+#include "TLorentzVector.h"
 
 //
 // class declaration
@@ -55,7 +60,12 @@ private:
   //virtual void endLuminosityBlock(edm::LuminosityBlock const&, edm::EventSetup const&) override;
 
   // ----------member data ---------------------------
+  edm::InputTag jetLabel_;
+  edm::InputTag ecalEBLabel_;
+  edm::InputTag ecalEELabel_;
   edm::EDGetTokenT<reco::CaloJetCollection> jetInputToken;
+  edm::EDGetTokenT<edm::SortedCollection<EcalRecHit,edm::StrictWeakOrdering<EcalRecHit>>> ecalRecHitsEBToken;
+  edm::EDGetTokenT<edm::SortedCollection<EcalRecHit,edm::StrictWeakOrdering<EcalRecHit>>> ecalRecHitsEEToken;
 };
 
 //
@@ -82,9 +92,17 @@ CaloJetTimingProducer::CaloJetTimingProducer(const edm::ParameterSet& iConfig)
   //if you want to put into the Run
   produces<ExampleData2,InRun>();
 */
-    produces<edm::ValueMap<float>>("hltDisplacedHLTCaloJetCollectionProducerMidPtTiming");
+    produces<edm::ValueMap<float>>("");
   //now do what ever other initialization is needed
-    jetInputToken = consumes<std::vector<reco::CaloJet>>(edm::InputTag("hltDisplacedHLTCaloJetCollectionProducerMidPt","","HLTX"));
+    jetLabel_= iConfig.getParameter<edm::InputTag>("jets");
+    ecalEBLabel_= iConfig.getParameter<edm::InputTag>("ebRecHitsColl");
+    ecalEELabel_= iConfig.getParameter<edm::InputTag>("eeRecHitsColl");
+    jetInputToken = consumes<std::vector<reco::CaloJet>>(jetLabel_);
+    ecalRecHitsEBToken = consumes<edm::SortedCollection<EcalRecHit,edm::StrictWeakOrdering<EcalRecHit>>>(ecalEBLabel_);
+    ecalRecHitsEEToken = consumes<edm::SortedCollection<EcalRecHit,edm::StrictWeakOrdering<EcalRecHit>>>(ecalEELabel_);
+    // jetInputToken = consumes<std::vector<reco::CaloJet>>(edm::InputTag("hltDisplacedHLTCaloJetCollectionProducerMidPt","","HLTX"));
+    // ecalRecHitsEBToken = consumes<edm::SortedCollection<EcalRecHit,edm::StrictWeakOrdering<EcalRecHit>>>(edm::InputTag("hltEcalRecHit","EcalRecHitsEB"));
+    // ecalRecHitsEEToken = consumes<edm::SortedCollection<EcalRecHit,edm::StrictWeakOrdering<EcalRecHit>>>(edm::InputTag("hltEcalRecHit","EcalRecHitsEE"));
 }
 
 CaloJetTimingProducer::~CaloJetTimingProducer() {
@@ -104,10 +122,40 @@ void CaloJetTimingProducer::produce(edm::Event& iEvent, const edm::EventSetup& i
     std::vector<float> jetTimings;
     Handle<reco::CaloJetCollection> jets;
     iEvent.getByToken(jetInputToken, jets); 
+    Handle<edm::SortedCollection<EcalRecHit,edm::StrictWeakOrdering<EcalRecHit>>> ecalRecHitsEB;
+    iEvent.getByToken(ecalRecHitsEBToken,ecalRecHitsEB);
+    std::vector<bool> skipCell(ecalRecHitsEB->size(),false); 
+    edm::ESHandle<CaloGeometry> pG; 
+    iSetup.get<CaloGeometryRecord>().get(pG); 
     for (auto const& c : *jets) {
-	// for (EcalRecHitCollection::const_iterator i=ecalRecHits->begin(); i!=ecalRecHits->end(); i++) {
-	// }
-	jetTimings.push_back(c.pt());
+	int iCell = -1;
+	TLorentzVector caloJetVecTemp;
+	caloJetVecTemp.SetPtEtaPhiM(c.pt(),c.eta(),c.phi(),0);
+	if (c.pt() < 15. || abs(c.eta()) > 2.4) {
+	    jetTimings.push_back(-50.);
+            continue;
+        }
+	float weightedTimeCell = 0;
+	float totalEmEnergyCell = 0;
+	for (EcalRecHitCollection::const_iterator i=ecalRecHitsEB->begin(); i!=ecalRecHitsEB->end(); i++) {
+	    iCell++;
+	    if (skipCell[iCell]) continue;
+	    if ((i->checkFlag(EcalRecHit::kSaturated) || i->checkFlag(EcalRecHit::kLeadingEdgeRecovered) || i->checkFlag(EcalRecHit::kPoorReco) || i->checkFlag(EcalRecHit::kWeird) || i->checkFlag(EcalRecHit::kDiWeird))) continue;
+            if (i->energy() < 0.5) continue;
+            if (i->timeError() < 0. || i->timeError() > 100) continue;
+            GlobalPoint p=pG->getPosition(i->detid());
+	    TLorentzVector caloCellVecTemp;
+	    caloCellVecTemp.SetPtEtaPhiM(1,p.eta(),p.phi(),0);
+            if (caloCellVecTemp.DeltaR(caloJetVecTemp) > 0.4) continue;
+	    weightedTimeCell += i->time()*i->energy();
+	    totalEmEnergyCell += i->energy();
+	}
+	if (totalEmEnergyCell > 0){
+	    jetTimings.push_back(weightedTimeCell/totalEmEnergyCell);
+	} 
+	else{
+	    jetTimings.push_back(-100);
+	}
     }
     std::unique_ptr<edm::ValueMap<float> > jetTimings_out(new edm::ValueMap<float>());
     edm::ValueMap<float>::Filler jetTimings_filler(*jetTimings_out);
@@ -116,10 +164,10 @@ void CaloJetTimingProducer::produce(edm::Event& iEvent, const edm::EventSetup& i
     int ijet = 0;
     for (auto const& c : *jets) {
 	reco::CaloJetRef calojetref(jets, ijet);
-	std::cout << (*jetTimings_out)[calojetref] <<std::endl;
+	// std::cout << (*jetTimings_out)[calojetref] <<std::endl;
 	ijet ++;
     }
-    iEvent.put(std::move(jetTimings_out), "hltDisplacedHLTCaloJetCollectionProducerMidPtTiming");
+    iEvent.put(std::move(jetTimings_out), "");
 }
 
 // ------------ method called once each stream before processing any runs, lumis or events  ------------
@@ -169,8 +217,10 @@ void CaloJetTimingProducer::fillDescriptions(edm::ConfigurationDescriptions& des
     //The following says we do not know what parameters are allowed so do no validation
     // Please change this to state exactly what you do use, even if it is no parameters
     edm::ParameterSetDescription desc;
-    desc.setUnknown();
-    descriptions.addDefault(desc);
+    desc.add<edm::InputTag>("jets", edm::InputTag(""));
+    desc.add<edm::InputTag>("ebRecHitsColl", edm::InputTag("hltEcalRecHit","EcalRecHitsEB"));
+    desc.add<edm::InputTag>("eeRecHitsColl", edm::InputTag("hltEcalRecHit","EcalRecHitsEE"));
+    descriptions.add("caloJetTimingProducer", desc);
 }
 
 //define this as a plug-in
