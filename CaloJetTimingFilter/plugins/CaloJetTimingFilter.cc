@@ -29,6 +29,7 @@ Implementation:
 #include "FWCore/ParameterSet/interface/ParameterSet.h"
 #include "FWCore/Utilities/interface/StreamID.h"
 
+#include "DataFormats/HLTReco/interface/TriggerFilterObjectWithRefs.h"
 //
 // class declaration
 //
@@ -107,8 +108,10 @@ void CaloJetTimingFilter::fillDescriptions(edm::ConfigurationDescriptions& descr
     //The following says we do not know what parameters are allowed so do no validation
     // Please change this to state exactly what you do use, even if it is no parameters
     edm::ParameterSetDescription desc;
-    desc.setUnknown();
-    descriptions.addDefault(desc);
+    makeHLTFilterDescription(desc);
+    desc.add<edm::InputTag>("jets", edm::InputTag("hltDisplacedHLTCaloJetCollectionProducerMidPt"));
+    desc.add<edm::InputTag>("jetTimes", edm::InputTag("hltDisplacedHLTCaloJetCollectionProducerMidPtTiming"));
+    descriptions.add("caloJetTimingFilter", desc);
 }
 //define this as a plug-in
 DEFINE_FWK_MODULE(CaloJetTimingFilter);
