@@ -51,6 +51,8 @@ class CaloJetTimingFilter : public HLTFilter {
 	//virtual void endLuminosityBlock(edm::LuminosityBlock const&, edm::EventSetup const&) override;
 	edm::InputTag jetLabel_;
 	edm::InputTag jetTimeLabel_;
+        unsigned int minJets_;
+        double timeThresh_;
 	edm::EDGetTokenT<reco::CaloJetCollection> jetInputToken;
 	edm::EDGetTokenT<edm::ValueMap<float>> jetTimesInputToken;
 
@@ -77,6 +79,8 @@ class CaloJetTimingFilter : public HLTFilter {
 CaloJetTimingFilter::CaloJetTimingFilter(const edm::ParameterSet& iConfig) : HLTFilter(iConfig){
     jetLabel_= iConfig.getParameter<edm::InputTag>("jets");
     jetTimeLabel_= iConfig.getParameter<edm::InputTag>("jetTimes");
+    minJets_= iConfig.getParameter<unsigned int>("minJets");
+    timeThresh_ = iConfig.getParameter<double>("timeThresh");
     jetInputToken = consumes<std::vector<reco::CaloJet>>(jetLabel_);
     jetTimesInputToken = consumes<edm::ValueMap<float>>(jetTimeLabel_);
     //now do what ever initialization is needed
@@ -94,11 +98,13 @@ bool CaloJetTimingFilter::hltFilter(edm::Event& iEvent, const edm::EventSetup& i
     iEvent.getByToken(jetInputToken, jets);
     edm::Handle<edm::ValueMap<float>> jetTimes;
     iEvent.getByToken(jetTimesInputToken, jetTimes);
+    unsigned int njets = 0;
     for (auto const& c : *jets) {
 	reco::CaloJetRef calojetref(jets, ijet);
-	if((*jetTimes)[calojetref] > 0) accept = true;
+	if((*jetTimes)[calojetref] > timeThresh_) njets++;
 	ijet ++;
     }
+    accept = njets >= minJets_;
     return accept;
 }
 
@@ -111,6 +117,8 @@ void CaloJetTimingFilter::fillDescriptions(edm::ConfigurationDescriptions& descr
     makeHLTFilterDescription(desc);
     desc.add<edm::InputTag>("jets", edm::InputTag("hltDisplacedHLTCaloJetCollectionProducerMidPt"));
     desc.add<edm::InputTag>("jetTimes", edm::InputTag("hltDisplacedHLTCaloJetCollectionProducerMidPtTiming"));
+    desc.add<unsigned int>("minJets", 1);
+    desc.add<double>("timeThresh", 1.);
     descriptions.add("caloJetTimingFilter", desc);
 }
 //define this as a plug-in

@@ -131,12 +131,13 @@ void CaloJetTimingProducer::produce(edm::Event& iEvent, const edm::EventSetup& i
 	int iCell = -1;
 	TLorentzVector caloJetVecTemp;
 	caloJetVecTemp.SetPtEtaPhiM(c.pt(),c.eta(),c.phi(),0);
-	if (c.pt() < 15. || abs(c.eta()) > 2.4) {
+	if (c.pt() < 15. || abs(c.eta()) > 1.48) {
 	    jetTimings.push_back(-50.);
             continue;
         }
 	float weightedTimeCell = 0;
 	float totalEmEnergyCell = 0;
+        unsigned int nCells = 0;
 	for (EcalRecHitCollection::const_iterator i=ecalRecHitsEB->begin(); i!=ecalRecHitsEB->end(); i++) {
 	    iCell++;
 	    if (skipCell[iCell]) continue;
@@ -149,8 +150,9 @@ void CaloJetTimingProducer::produce(edm::Event& iEvent, const edm::EventSetup& i
             if (caloCellVecTemp.DeltaR(caloJetVecTemp) > 0.4) continue;
 	    weightedTimeCell += i->time()*i->energy();
 	    totalEmEnergyCell += i->energy();
+            nCells++;
 	}
-	if (totalEmEnergyCell > 0){
+	if (totalEmEnergyCell > 10 && nCells > 5){
 	    jetTimings.push_back(weightedTimeCell/totalEmEnergyCell);
 	} 
 	else{
