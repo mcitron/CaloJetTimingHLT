@@ -127,8 +127,10 @@ void CaloJetTimingProducer::produce(edm::Event& iEvent, const edm::EventSetup& i
     std::vector<bool> skipCell(ecalRecHitsEB->size(),false); 
     edm::ESHandle<CaloGeometry> pG; 
     iSetup.get<CaloGeometryRecord>().get(pG); 
+    int ijet = - 1;
     for (auto const& c : *jets) {
 	int iCell = -1;
+        ijet++;
 	TLorentzVector caloJetVecTemp;
 	caloJetVecTemp.SetPtEtaPhiM(c.pt(),c.eta(),c.phi(),0);
 	if (c.pt() < 15. || abs(c.eta()) > 1.48) {
@@ -156,19 +158,13 @@ void CaloJetTimingProducer::produce(edm::Event& iEvent, const edm::EventSetup& i
 	    jetTimings.push_back(weightedTimeCell/totalEmEnergyCell);
 	} 
 	else{
-	    jetTimings.push_back(-100);
+	    jetTimings.push_back(-50);
 	}
     }
     std::unique_ptr<edm::ValueMap<float> > jetTimings_out(new edm::ValueMap<float>());
     edm::ValueMap<float>::Filler jetTimings_filler(*jetTimings_out);
     jetTimings_filler.insert(jets, jetTimings.begin(), jetTimings.end());
     jetTimings_filler.fill();
-    int ijet = 0;
-    for (auto const& c : *jets) {
-	reco::CaloJetRef calojetref(jets, ijet);
-	// std::cout << (*jetTimings_out)[calojetref] <<std::endl;
-	ijet ++;
-    }
     iEvent.put(std::move(jetTimings_out), "");
 }
 
