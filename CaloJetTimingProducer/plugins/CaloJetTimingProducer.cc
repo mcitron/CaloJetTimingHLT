@@ -133,7 +133,7 @@ void CaloJetTimingProducer::produce(edm::Event& iEvent, const edm::EventSetup& i
         ijet++;
 	TLorentzVector caloJetVecTemp;
 	caloJetVecTemp.SetPtEtaPhiM(c.pt(),c.eta(),c.phi(),0);
-	if (c.pt() < 15. || abs(c.eta()) > 1.48) {
+	if (fabs(c.eta()) > 1.48) {
 	    jetTimings.push_back(-50.);
             continue;
         }
@@ -146,6 +146,7 @@ void CaloJetTimingProducer::produce(edm::Event& iEvent, const edm::EventSetup& i
 	    if ((i->checkFlag(EcalRecHit::kSaturated) || i->checkFlag(EcalRecHit::kLeadingEdgeRecovered) || i->checkFlag(EcalRecHit::kPoorReco) || i->checkFlag(EcalRecHit::kWeird) || i->checkFlag(EcalRecHit::kDiWeird))) continue;
             if (i->energy() < 0.5) continue;
             if (i->timeError() < 0. || i->timeError() > 100) continue;
+            if (i->time() < -12.5 || i->time() > 12.5) continue;
             GlobalPoint p=pG->getPosition(i->detid());
 	    TLorentzVector caloCellVecTemp;
 	    caloCellVecTemp.SetPtEtaPhiM(1,p.eta(),p.phi(),0);
