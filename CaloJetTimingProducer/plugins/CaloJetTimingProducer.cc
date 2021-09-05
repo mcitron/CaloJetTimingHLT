@@ -37,6 +37,7 @@
 #include "DataFormats/EcalRecHit/interface/EcalRecHitCollections.h"
 #include "HLTrigger/HLTcore/interface/defaultModuleLabel.h"
 #include "TLorentzVector.h"
+#include "DataFormats/Math/interface/deltaR.h"
 
 //
 // class declaration
@@ -63,6 +64,7 @@ private:
   edm::InputTag jetLabel_;
   edm::InputTag ecalEBLabel_;
   edm::InputTag ecalEELabel_;
+  bool barrelOnly_;
   edm::EDGetTokenT<reco::CaloJetCollection> jetInputToken;
   edm::EDGetTokenT<edm::SortedCollection<EcalRecHit,edm::StrictWeakOrdering<EcalRecHit>>> ecalRecHitsEBToken;
   edm::EDGetTokenT<edm::SortedCollection<EcalRecHit,edm::StrictWeakOrdering<EcalRecHit>>> ecalRecHitsEEToken;
@@ -97,6 +99,7 @@ CaloJetTimingProducer::CaloJetTimingProducer(const edm::ParameterSet& iConfig)
     jetLabel_= iConfig.getParameter<edm::InputTag>("jets");
     ecalEBLabel_= iConfig.getParameter<edm::InputTag>("ebRecHitsColl");
     ecalEELabel_= iConfig.getParameter<edm::InputTag>("eeRecHitsColl");
+    barrelOnly_ = iConfig.getParameter<bool>("barrelOnly");
     jetInputToken = consumes<std::vector<reco::CaloJet>>(jetLabel_);
     ecalRecHitsEBToken = consumes<edm::SortedCollection<EcalRecHit,edm::StrictWeakOrdering<EcalRecHit>>>(ecalEBLabel_);
     ecalRecHitsEEToken = consumes<edm::SortedCollection<EcalRecHit,edm::StrictWeakOrdering<EcalRecHit>>>(ecalEELabel_);
@@ -124,36 +127,45 @@ void CaloJetTimingProducer::produce(edm::Event& iEvent, const edm::EventSetup& i
     iEvent.getByToken(jetInputToken, jets); 
     Handle<edm::SortedCollection<EcalRecHit,edm::StrictWeakOrdering<EcalRecHit>>> ecalRecHitsEB;
     iEvent.getByToken(ecalRecHitsEBToken,ecalRecHitsEB);
-    std::vector<bool> skipCell(ecalRecHitsEB->size(),false); 
+    Handle<edm::SortedCollection<EcalRecHit,edm::StrictWeakOrdering<EcalRecHit>>> ecalRecHitsEE;
+    iEvent.getByToken(ecalRecHitsEEToken,ecalRecHitsEE);
+    std::vector<bool> skipCellEB(ecalRecHitsEB->size(),false); 
+    std::vector<bool> skipCellEE(ecalRecHitsEB->size(),false); 
     edm::ESHandle<CaloGeometry> pG; 
     iSetup.get<CaloGeometryRecord>().get(pG); 
-    int ijet = - 1;
     for (auto const& c : *jets) {
 	int iCell = -1;
-        ijet++;
-	TLorentzVector caloJetVecTemp;
-	caloJetVecTemp.SetPtEtaPhiM(c.pt(),c.eta(),c.phi(),0);
-	if (fabs(c.eta()) > 1.48) {
-	    jetTimings.push_back(-50.);
-            continue;
-        }
 	float weightedTimeCell = 0;
 	float totalEmEnergyCell = 0;
-        unsigned int nCells = 0;
+	unsigned int nCells = 0;
 	for (EcalRecHitCollection::const_iterator i=ecalRecHitsEB->begin(); i!=ecalRecHitsEB->end(); i++) {
 	    iCell++;
-	    if (skipCell[iCell]) continue;
+	    if (skipCellEB[iCell]) continue;
 	    if ((i->checkFlag(EcalRecHit::kSaturated) || i->checkFlag(EcalRecHit::kLeadingEdgeRecovered) || i->checkFlag(EcalRecHit::kPoorReco) || i->checkFlag(EcalRecHit::kWeird) || i->checkFlag(EcalRecHit::kDiWeird))) continue;
             if (i->energy() < 0.5) continue;
             if (i->timeError() < 0. || i->timeError() > 100) continue;
             if (i->time() < -12.5 || i->time() > 12.5) continue;
             GlobalPoint p=pG->getPosition(i->detid());
-	    TLorentzVector caloCellVecTemp;
-	    caloCellVecTemp.SetPtEtaPhiM(1,p.eta(),p.phi(),0);
-            if (caloCellVecTemp.DeltaR(caloJetVecTemp) > 0.4) continue;
-	    weightedTimeCell += i->time()*i->energy();
-	    totalEmEnergyCell += i->energy();
+            if (reco::deltaR(c,p) > 0.4) continue;
+	    weightedTimeCell += i->time()*i->energy()*sin(p.theta());
+	    totalEmEnergyCell += i->energy()*sin(p.theta());
             nCells++;
+	}
+	iCell = -1;
+	if (!barrelOnly_){
+	    for (EcalRecHitCollection::const_iterator i=ecalRecHitsEE->begin(); i!=ecalRecHitsEE->end(); i++) {
+		iCell++;
+		if (skipCellEE[iCell]) continue;
+		if ((i->checkFlag(EcalRecHit::kSaturated) || i->checkFlag(EcalRecHit::kLeadingEdgeRecovered) || i->checkFlag(EcalRecHit::kPoorReco) || i->checkFlag(EcalRecHit::kWeird) || i->checkFlag(EcalRecHit::kDiWeird))) continue;
+		if (i->energy() < 0.5) continue;
+		if (i->timeError() < 0. || i->timeError() > 100) continue;
+		if (i->time() < -12.5 || i->time() > 12.5) continue;
+		GlobalPoint p=pG->getPosition(i->detid());
+		if (reco::deltaR(c,p) > 0.4) continue;
+		weightedTimeCell += i->time()*i->energy()*sin(p.theta());
+		totalEmEnergyCell += i->energy()*sin(p.theta());
+		nCells++;
+	    }
 	}
 	if (totalEmEnergyCell > 10 && nCells > 5){
 	    jetTimings.push_back(weightedTimeCell/totalEmEnergyCell);
@@ -217,6 +229,7 @@ void CaloJetTimingProducer::fillDescriptions(edm::ConfigurationDescriptions& des
     // Please change this to state exactly what you do use, even if it is no parameters
     edm::ParameterSetDescription desc;
     desc.add<edm::InputTag>("jets", edm::InputTag(""));
+    desc.add<bool>("barrelOnly", false);
     desc.add<edm::InputTag>("ebRecHitsColl", edm::InputTag("hltEcalRecHit","EcalRecHitsEB"));
     desc.add<edm::InputTag>("eeRecHitsColl", edm::InputTag("hltEcalRecHit","EcalRecHitsEE"));
     descriptions.add("caloJetTimingProducer", desc);

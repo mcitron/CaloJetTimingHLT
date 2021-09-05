@@ -103,7 +103,7 @@ bool CaloJetTimingFilter::hltFilter(edm::Event& iEvent, const edm::EventSetup& i
     unsigned int njets = 0;
     for (auto const& c : *jets) {
 	reco::CaloJetRef calojetref(jets, ijet);
-	if((*jetTimes)[calojetref] > timeThresh_ && c.pt() > minPt_) njets++;
+	if((*jetTimes)[calojetref] > timeThresh_ && c.pt() > minPt_ && fabs(c.eta()) < 1.48) njets++;
 	ijet ++;
     }
     accept = njets >= minJets_;
