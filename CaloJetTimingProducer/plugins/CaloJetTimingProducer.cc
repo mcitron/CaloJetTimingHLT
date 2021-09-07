@@ -158,7 +158,7 @@ void CaloJetTimingProducer::produce(edm::Event& iEvent, const edm::EventSetup& i
 		if (skipCellEE[iCell]) continue;
 		if ((i->checkFlag(EcalRecHit::kSaturated) || i->checkFlag(EcalRecHit::kLeadingEdgeRecovered) || i->checkFlag(EcalRecHit::kPoorReco) || i->checkFlag(EcalRecHit::kWeird) || i->checkFlag(EcalRecHit::kDiWeird))) continue;
 		if (i->energy() < 0.5) continue;
-		if (i->timeError() < 0. || i->timeError() > 100) continue;
+		if (i->timeError() <= 0. || i->timeError() > 100) continue;
 		if (i->time() < -12.5 || i->time() > 12.5) continue;
 		GlobalPoint p=pG->getPosition(i->detid());
 		if (reco::deltaR(c,p) > 0.4) continue;
