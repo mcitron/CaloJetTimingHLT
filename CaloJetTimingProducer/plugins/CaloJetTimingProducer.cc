@@ -95,6 +95,8 @@ CaloJetTimingProducer::CaloJetTimingProducer(const edm::ParameterSet& iConfig)
   produces<ExampleData2,InRun>();
 */
     produces<edm::ValueMap<float>>("");
+    produces<edm::ValueMap<unsigned int>>("jetCellsForTiming");
+    produces<edm::ValueMap<float>>("jetEcalEtForTiming");
   //now do what ever other initialization is needed
     jetLabel_= iConfig.getParameter<edm::InputTag>("jets");
     ecalEBLabel_= iConfig.getParameter<edm::InputTag>("ebRecHitsColl");
@@ -123,6 +125,8 @@ CaloJetTimingProducer::~CaloJetTimingProducer() {
 void CaloJetTimingProducer::produce(edm::Event& iEvent, const edm::EventSetup& iSetup) {
     using namespace edm;
     std::vector<float> jetTimings;
+    std::vector<unsigned int> jetCellsForTiming;
+    std::vector<float> jetEcalEtForTiming;
     Handle<reco::CaloJetCollection> jets;
     iEvent.getByToken(jetInputToken, jets); 
     Handle<edm::SortedCollection<EcalRecHit,edm::StrictWeakOrdering<EcalRecHit>>> ecalRecHitsEB;
@@ -143,7 +147,7 @@ void CaloJetTimingProducer::produce(edm::Event& iEvent, const edm::EventSetup& i
 	    if (skipCellEB[iCell]) continue;
 	    if ((i->checkFlag(EcalRecHit::kSaturated) || i->checkFlag(EcalRecHit::kLeadingEdgeRecovered) || i->checkFlag(EcalRecHit::kPoorReco) || i->checkFlag(EcalRecHit::kWeird) || i->checkFlag(EcalRecHit::kDiWeird))) continue;
             if (i->energy() < 0.5) continue;
-            if (i->timeError() < 0. || i->timeError() > 100) continue;
+            if (i->timeError() <= 0. || i->timeError() > 100) continue;
             if (i->time() < -12.5 || i->time() > 12.5) continue;
             GlobalPoint p=pG->getPosition(i->detid());
             if (reco::deltaR(c,p) > 0.4) continue;
@@ -167,11 +171,15 @@ void CaloJetTimingProducer::produce(edm::Event& iEvent, const edm::EventSetup& i
 		nCells++;
 	    }
 	}
-	if (totalEmEnergyCell > 10 && nCells > 5){
+	if (totalEmEnergyCell > 0){
 	    jetTimings.push_back(weightedTimeCell/totalEmEnergyCell);
+	    jetEcalEtForTiming.push_back(totalEmEnergyCell);
+	    jetCellsForTiming.push_back(nCells);
 	} 
 	else{
 	    jetTimings.push_back(-50);
+	    jetEcalEtForTiming.push_back(totalEmEnergyCell);
+	    jetCellsForTiming.push_back(nCells);
 	}
     }
     std::unique_ptr<edm::ValueMap<float> > jetTimings_out(new edm::ValueMap<float>());
@@ -179,6 +187,18 @@ void CaloJetTimingProducer::produce(edm::Event& iEvent, const edm::EventSetup& i
     jetTimings_filler.insert(jets, jetTimings.begin(), jetTimings.end());
     jetTimings_filler.fill();
     iEvent.put(std::move(jetTimings_out), "");
+
+    std::unique_ptr<edm::ValueMap<float> > jetEcalEtForTiming_out(new edm::ValueMap<float>());
+    edm::ValueMap<float>::Filler jetEcalEtForTiming_filler(*jetEcalEtForTiming_out);
+    jetEcalEtForTiming_filler.insert(jets, jetEcalEtForTiming.begin(), jetEcalEtForTiming.end());
+    jetEcalEtForTiming_filler.fill();
+    iEvent.put(std::move(jetEcalEtForTiming_out), "jetEcalEtForTiming");
+
+    std::unique_ptr<edm::ValueMap<unsigned int> > jetCellsForTiming_out(new edm::ValueMap<unsigned int>());
+    edm::ValueMap<unsigned int>::Filler jetCellsForTiming_filler(*jetCellsForTiming_out);
+    jetCellsForTiming_filler.insert(jets, jetCellsForTiming.begin(), jetCellsForTiming.end());
+    jetCellsForTiming_filler.fill();
+    iEvent.put(std::move(jetCellsForTiming_out), "jetCellsForTiming");
 }
 
 // ------------ method called once each stream before processing any runs, lumis or events  ------------
